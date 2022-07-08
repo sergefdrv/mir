@@ -3,8 +3,8 @@ package mir
 import (
 	"context"
 	"fmt"
+
 	"github.com/filecoin-project/mir/pkg/modules"
-	"runtime/debug"
 
 	"github.com/filecoin-project/mir/pkg/events"
 	t "github.com/filecoin-project/mir/pkg/types"
@@ -124,29 +124,29 @@ func safelyApplyEventsPassive(
 	module modules.PassiveModule,
 	events *events.EventList,
 ) (result *events.EventList, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if rErr, ok := r.(error); ok {
-				err = fmt.Errorf("module panicked: %w\nStack trace:\n%s", rErr, string(debug.Stack()))
-			} else {
-				err = fmt.Errorf("module panicked: %v\nStack trace:\n%s", r, string(debug.Stack()))
-			}
-		}
-	}()
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		if rErr, ok := r.(error); ok {
+	// 			err = fmt.Errorf("module panicked: %w\nStack trace:\n%s", rErr, string(debug.Stack()))
+	// 		} else {
+	// 			err = fmt.Errorf("module panicked: %v\nStack trace:\n%s", r, string(debug.Stack()))
+	// 		}
+	// 	}
+	// }()
 
 	return module.ApplyEvents(events)
 }
 
 func safelyApplyEventsActive(ctx context.Context, module modules.ActiveModule, events *events.EventList) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if rErr, ok := r.(error); ok {
-				err = fmt.Errorf("module panicked: %w\nStack trace:\n%s", rErr, string(debug.Stack()))
-			} else {
-				err = fmt.Errorf("module panicked: %v\nStack trace:\n%s", r, string(debug.Stack()))
-			}
-		}
-	}()
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		if rErr, ok := r.(error); ok {
+	// 			err = fmt.Errorf("module panicked: %w\nStack trace:\n%s", rErr, string(debug.Stack()))
+	// 		} else {
+	// 			err = fmt.Errorf("module panicked: %v\nStack trace:\n%s", r, string(debug.Stack()))
+	// 		}
+	// 	}
+	// }()
 
 	return module.ApplyEvents(ctx, events)
 }

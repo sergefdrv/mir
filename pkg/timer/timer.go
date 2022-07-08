@@ -3,10 +3,11 @@ package timer
 import (
 	"context"
 	"fmt"
+
+	"github.com/filecoin-project/mir/pkg/common/time"
 	"github.com/filecoin-project/mir/pkg/events"
 	"github.com/filecoin-project/mir/pkg/pb/eventpb"
 	t "github.com/filecoin-project/mir/pkg/types"
-	"time"
 )
 
 // The Timer module abstracts the passage of real time.
