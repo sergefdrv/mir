@@ -165,12 +165,15 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 	}
 
 	if tr.Proc != nil {
-		initEvents := events.EmptyList()
-		initEvents.PushBack(events.WALLoadAll("wal"))
-		for m := range nodeModules {
-			initEvents.PushBack(events.Init(m))
-		}
-		go tr.Sim.SendEventList(tr.Proc, initEvents)
+		go func() {
+			tr.Sim.SendEvents(tr.Proc, events.ListOf(events.WALLoadAll("wal")))
+			//initEvents := events.EmptyList()
+			for m := range nodeModules {
+				//initEvents.PushBack(events.Init(m))
+				tr.Sim.SendEvents(tr.Proc, events.ListOf(events.Init(m)))
+			}
+			// go tr.Sim.SendEventList(tr.Proc, initEvents)
+		}()
 	}
 
 	// Run the node until it stops.
@@ -226,17 +229,13 @@ func (tr *TestReplica) submitFakeRequests(ctx context.Context, node *mir.Node, w
 				)},
 			))
 
-			errChan := make(chan error, 1)
-			go func() {
-				errChan <- node.InjectEvents(ctx, eventList)
-			}()
-
 			if tr.Sim != nil {
-				tr.Sim.SendEventList(tr.Proc, eventList)
+				// tr.Sim.SendEventList(tr.Proc, eventList)
+				tr.Sim.SendEvents(tr.Proc, eventList)
 				tr.Proc.Delay(tr.Sim.RandDuration(0, time.Millisecond))
 			}
 
-			if err := <-errChan; err != nil {
+			if err := node.InjectEvents(ctx, eventList); err != nil {
 
 				// TODO (Jason), failing on err causes flakes in the teardown,
 				// so just returning for now, we should address later
