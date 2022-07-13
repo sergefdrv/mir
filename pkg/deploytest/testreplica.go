@@ -165,15 +165,16 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 	}
 
 	if tr.Proc != nil {
-		go func() {
-			tr.Sim.SendEvents(tr.Proc, events.ListOf(events.WALLoadAll("wal")))
-			//initEvents := events.EmptyList()
-			for m := range nodeModules {
-				//initEvents.PushBack(events.Init(m))
-				tr.Sim.SendEvents(tr.Proc, events.ListOf(events.Init(m)))
-			}
-			// go tr.Sim.SendEventList(tr.Proc, initEvents)
-		}()
+		//go func() {
+		//tr.Sim.SendEvents(tr.Proc, events.ListOf(events.WALLoadAll("wal")))
+		tr.Sim.SendEvent(tr.Proc, events.WALLoadAll("wal"))
+		initEvents := events.EmptyList()
+		for m := range nodeModules {
+			initEvents.PushBack(events.Init(m))
+			// tr.Sim.SendEvents(tr.Proc, events.ListOf(events.Init(m)))
+		}
+		go tr.Sim.SendEventList(tr.Proc, initEvents)
+		// }()
 	}
 
 	// Run the node until it stops.
@@ -230,8 +231,8 @@ func (tr *TestReplica) submitFakeRequests(ctx context.Context, node *mir.Node, w
 			))
 
 			if tr.Sim != nil {
-				// tr.Sim.SendEventList(tr.Proc, eventList)
-				tr.Sim.SendEvents(tr.Proc, eventList)
+				tr.Sim.SendEventList(tr.Proc, eventList)
+				// tr.Sim.SendEvents(tr.Proc, eventList)
 				tr.Proc.Delay(tr.Sim.RandDuration(0, time.Millisecond))
 			}
 

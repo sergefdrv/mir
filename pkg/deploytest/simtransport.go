@@ -184,7 +184,7 @@ func (m *simTransportModule) handleOutChan(proc *testsim.Process) {
 		destModule := t.ModuleID(msg.message.DestModule)
 		e := events.MessageReceived(destModule, msg.from, msg.message)
 
-		m.SimNode.SendEvents(proc, events.ListOf(e))
+		m.SimNode.SendEvent(proc, e)
 		select {
 		case m.outChan <- events.ListOf(e):
 			// m.SimNode.SendEvent(proc, e)

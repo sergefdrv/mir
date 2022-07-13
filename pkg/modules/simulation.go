@@ -6,7 +6,6 @@ package modules
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -54,24 +53,24 @@ func (s *Simulation) NewNode( /* id t.NodeID, */ delayFn EventDelayFn) *SimNode 
 	return n
 }
 
-// func (n *SimNode) SendEventList(proc *testsim.Process, eventList *events.EventList) {
-// 	// eventsMap := make(map[t.ModuleID][]*eventpb.Event)
+func (n *SimNode) SendEventList(proc *testsim.Process, eventList *events.EventList) {
+	// eventsMap := make(map[t.ModuleID][]*eventpb.Event)
 
-// 	it := eventList.Iterator()
-// 	for e := it.Next(); e != nil; e = it.Next() {
-// 		n.SendEvent(proc, e)
-// 		// eventsMap[m] = append(eventsMap[m], e)
-// 	}
+	it := eventList.Iterator()
+	for e := it.Next(); e != nil; e = it.Next() {
+		n.SendEvent(proc, e)
+		// eventsMap[m] = append(eventsMap[m], e)
+	}
 
-// 	// for m, v := range eventsMap {
-// 	// 	proc.Send(n.moduleChans[m], v)
-// 	// }
-// }
+	// for m, v := range eventsMap {
+	// 	proc.Send(n.moduleChans[m], v)
+	// }
+}
 
-// func (n *SimNode) SendEvent(proc *testsim.Process, e *eventpb.Event) {
-// 	m := t.ModuleID(e.DestModule)
-// 	proc.Send(n.moduleChans[m], e)
-// }
+func (n *SimNode) SendEvent(proc *testsim.Process, e *eventpb.Event) {
+	m := t.ModuleID(e.DestModule)
+	proc.Send(n.moduleChans[m], e)
+}
 
 // func (n *SimNode) sendFollowUps(proc *testsim.Process, origEvents []*eventpb.Event) {
 // 	for _, e := range origEvents {
@@ -81,39 +80,39 @@ func (s *Simulation) NewNode( /* id t.NodeID, */ delayFn EventDelayFn) *SimNode 
 // 	}
 // }
 
-// func (n *SimNode) recvEvent(proc *testsim.Process, simChan *testsim.Chan) (e *eventpb.Event, ok bool) {
-// 	v, ok := proc.Recv(simChan)
-// 	if !ok {
-// 		return nil, false
-// 	}
-// 	return v.(*eventpb.Event), true
-// }
-
-func (n *SimNode) SendEvents(proc *testsim.Process, eventList *events.EventList) {
-	eventsMap := make(map[t.ModuleID]*events.EventList)
-
-	it := eventList.Iterator()
-	for e := it.Next(); e != nil; e = it.Next() {
-		m := t.ModuleID(e.DestModule)
-		if eventsMap[m] == nil {
-			eventsMap[m] = events.EmptyList()
-		}
-		eventsMap[m].PushBack(e)
-	}
-
-	for m, v := range eventsMap {
-		fmt.Println("Sending", v.Slice())
-		proc.Send(n.moduleChans[m], v)
-	}
-}
-
-func (n *SimNode) recvEvents(proc *testsim.Process, simChan *testsim.Chan) (eventList *events.EventList, ok bool) {
+func (n *SimNode) recvEvent(proc *testsim.Process, simChan *testsim.Chan) (e *eventpb.Event, ok bool) {
 	v, ok := proc.Recv(simChan)
 	if !ok {
 		return nil, false
 	}
-	return v.(*events.EventList), true
+	return v.(*eventpb.Event), true
 }
+
+// func (n *SimNode) SendEvents(proc *testsim.Process, eventList *events.EventList) {
+// 	eventsMap := make(map[t.ModuleID]*events.EventList)
+
+// 	it := eventList.Iterator()
+// 	for e := it.Next(); e != nil; e = it.Next() {
+// 		m := t.ModuleID(e.DestModule)
+// 		if eventsMap[m] == nil {
+// 			eventsMap[m] = events.EmptyList()
+// 		}
+// 		eventsMap[m].PushBack(e)
+// 	}
+
+// 	for m, v := range eventsMap {
+// 		fmt.Println("Sending", v.Slice())
+// 		proc.Send(n.moduleChans[m], v)
+// 	}
+// }
+
+// func (n *SimNode) recvEvents(proc *testsim.Process, simChan *testsim.Chan) (eventList *events.EventList, ok bool) {
+// 	v, ok := proc.Recv(simChan)
+// 	if !ok {
+// 		return nil, false
+// 	}
+// 	return v.(*events.EventList), true
+// }
 
 func (n *SimNode) WrapModules(mods Modules) Modules {
 	wrapped := make(Modules, len(mods))
@@ -166,19 +165,34 @@ type eventsOut struct {
 type simModule struct {
 	// Module
 	*SimNode
-	inChan  chan eventsIn
-	outChan chan eventsOut
-	simChan *testsim.Chan
+	applyFn applyEventsFn
+	// inChan  chan eventsIn
+	// outChan chan eventsOut
+	eventChan chan *eventpb.Event
+	//simChan        *testsim.Chan
 }
 
 func newSimModule(n *SimNode, m Module, simChan *testsim.Chan) *simModule {
-	sm := &simModule{
-		// Module:  m,
-		SimNode: n,
-		inChan:  make(chan eventsIn, 1),
-		outChan: make(chan eventsOut, 1),
-		simChan: simChan,
-	}
+	// sm := &simModule{
+	// 	// Module:  m,
+	// 	SimNode: n,
+	// 	// inChan:  make(chan eventsIn, 1),
+	// 	// outChan: make(chan eventsOut, 1),
+	// 	origEventsChan: make(chan *eventpb.Event, 1),
+	// 	//simChan:        simChan,
+	// }
+
+	eventChan := make(chan *eventpb.Event, 1)
+	proc := n.Spawn()
+	go func() {
+		for {
+			e, ok := n.recvEvent(proc, simChan)
+			if !ok {
+				return
+			}
+			eventChan <- e
+		}
+	}()
 
 	var applyFn applyEventsFn
 	switch m := m.(type) {
@@ -194,82 +208,101 @@ func newSimModule(n *SimNode, m Module, simChan *testsim.Chan) *simModule {
 		panic("Unexpected module type")
 	}
 
-	go sm.run(n.Spawn(), applyFn)
+	//go sm.run(n.Spawn() /* , applyFn */)
 
-	return sm
+	return &simModule{
+		SimNode:   n,
+		applyFn:   applyFn,
+		eventChan: eventChan,
+	}
 }
 
-func (m *simModule) run(proc *testsim.Process, applyFn applyEventsFn) {
-	//for {
-	origEvents, ok := m.SimNode.recvEvents(proc, m.simChan)
-	if !ok {
-		return
-	}
+// func (m *simModule) run(proc *testsim.Process /* , applyFn applyEventsFn */) {
+// 	for {
+// 		e, ok := m.SimNode.recvEvent(proc, m.simChan)
+// 		if !ok {
+// 			return
+// 		}
 
-	fmt.Println(origEvents.Slice())
+// 		m.origEventsChan <- e
+// 	}
+// 	//for {
+// 	// origEvents, ok := m.SimNode.recvEvents(proc, m.simChan)
+// 	// if !ok {
+// 	// 	return
+// 	// }
 
-	in := <-m.inChan
+// 	// fmt.Println(origEvents.Slice())
 
-	if origEvents.Len() != in.eventList.Len() {
-		fmt.Println(origEvents.Slice(), in.eventList.Slice())
-		panic("Mismatching number of events")
-	}
+// 	// in := <-m.inChan
 
-	it := in.eventList.Iterator()
-	for e := it.Next(); e != nil; e = it.Next() {
-		if !proc.Delay(m.SimNode.delayFn(e)) {
-			return
-		}
-	}
+// 	// if origEvents.Len() != in.eventList.Len() {
+// 	// 	fmt.Println(origEvents.Slice(), in.eventList.Slice())
+// 	// 	panic("Mismatching number of events")
+// 	// }
 
-	var out eventsOut
-	out.eventList, out.err = applyFn(in.ctx, in.eventList)
+// 	// it := in.eventList.Iterator()
+// 	// for e := it.Next(); e != nil; e = it.Next() {
+// 	// 	if !proc.Delay(m.SimNode.delayFn(e)) {
+// 	// 		return
+// 	// 	}
+// 	// }
 
-	go m.run(proc.Fork(), applyFn)
-	defer proc.Exit()
+// 	// var out eventsOut
+// 	// out.eventList, out.err = applyFn(in.ctx, in.eventList)
 
-	if out.err == nil {
-		_, followUps := origEvents.StripFollowUps()
-		followUps.PushBackList(out.eventList)
-		m.SimNode.SendEvents(proc, followUps)
-		// m.SimNode.SendEvents(proc, out.eventList)
-	}
+// 	// go m.run(proc.Fork(), applyFn)
+// 	// defer proc.Exit()
 
-	m.outChan <- out
-	//}
-}
+// 	// if out.err == nil {
+// 	// 	_, followUps := origEvents.StripFollowUps()
+// 	// 	followUps.PushBackList(out.eventList)
+// 	// 	//m.SimNode.SendEvents(proc, followUps)
+// 	// 	m.SimNode.SendEventList(proc, followUps)
+// 	// }
+
+// 	// m.outChan <- out
+// 	//}
+// }
 
 func (m *simModule) applyEvents(ctx context.Context, eventList *events.EventList) (eventsOut *events.EventList, err error) {
-	m.inChan <- eventsIn{ctx, eventList}
-	out := <-m.outChan
-	return out.eventList, out.err
-	// proc := m.Simulation.Spawn()
+	// m.inChan <- eventsIn{ctx, eventList}
+	// out := <-m.outChan
+	// return out.eventList, out.err
+	proc := m.Simulation.Spawn()
 
-	// done := make(chan struct{})
-	// go func() {
-	// 	select {
-	// 	case <-ctx.Done():
-	// 		proc.Kill()
-	// 	case <-done:
-	// 	}
-	// }()
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			proc.Kill()
+		case <-done:
+		}
+	}()
 
-	// // fmt.Println(eventList.Slice())
+	// fmt.Println(eventList.Slice())
 
 	// origEvents := make([]*eventpb.Event, eventList.Len())
 	// for i := range origEvents {
-	// 	e, ok := m.SimNode.recvEvent(proc, m.simChan)
-	// 	if !ok {
-	// 		panic("Module simulation process died")
-	// 	}
-	// 	origEvents[i] = e
+	// 	// e, ok := m.SimNode.recvEvent(proc, m.simChan)
+	// 	// if !ok {
+	// 	// 	panic("Module simulation process died")
+	// 	// }
+	// 	// origEvents[i] = e
+	// 	origEvents[i] = <-m.origEventsChan
 	// }
+	origEvents := events.EmptyList()
+	for i := 0; i < eventList.Len(); i++ {
+		origEvents.PushBack(<-m.eventChan)
+	}
 
 	// for _, e := range origEvents {
-	// 	if !proc.Delay(m.SimNode.delayFn(e)) {
-	// 		return nil, nil
-	// 	}
-	// }
+	it := origEvents.Iterator()
+	for e := it.Next(); e != nil; e = it.Next() {
+		if !proc.Delay(m.SimNode.delayFn(e)) {
+			return nil, nil
+		}
+	}
 
 	// switch m := m.Module.(type) {
 	// case PassiveModule:
@@ -279,30 +312,33 @@ func (m *simModule) applyEvents(ctx context.Context, eventList *events.EventList
 	// default:
 	// 	panic("Unexpected module type")
 	// }
+	eventsOut, err = m.applyFn(ctx, eventList)
+	if err != nil {
+		return nil, err
+	}
 
-	// if err != nil {
-	// 	return nil, err
-	// }
+	go func() {
+		defer close(done)
+		defer proc.Exit()
 
-	// go func() {
-	// 	defer close(done)
+		// for _, e := range origEvents {
+		// 	followUps := e.Next
+		// 	for _, e := range followUps {
+		// 		m.SimNode.SendEvent(proc, e)
+		// 	}
+		// }
+		_, followUps := origEvents.StripFollowUps()
+		m.SimNode.SendEventList(proc, followUps)
+		m.SimNode.SendEventList(proc, eventsOut)
 
-	// 	for _, e := range origEvents {
-	// 		followUps := e.Next
-	// 		for _, e := range followUps {
-	// 			m.SimNode.SendEvent(proc, e)
-	// 		}
-	// 	}
+		// it := eventsOut.Iterator()
+		// for e := it.Next(); e != nil; e = it.Next() {
+		// 	m.SimNode.SendEvent(proc, e)
+		// }
 
-	// 	it := eventsOut.Iterator()
-	// 	for e := it.Next(); e != nil; e = it.Next() {
-	// 		m.SimNode.SendEvent(proc, e)
-	// 	}
+	}()
 
-	// 	proc.Exit()
-	// }()
-
-	// return eventsOut, nil
+	return eventsOut, nil
 }
 
 type passiveSimModule struct {
