@@ -106,7 +106,7 @@ func (n *SimNode) SendEvents(proc *testsim.Process, eventList *events.EventList)
 	//go func() {
 	for m, v := range eventsMap {
 		//proc.Delay(n.RandDuration(1, time.Microsecond))
-		proc.Delay(0)
+		proc.Delay(1)
 		fmt.Println("Sending", v.Slice())
 		proc.Send(n.moduleChans[m], v)
 		fmt.Println("Sent", v.Slice())
@@ -350,9 +350,9 @@ func (m *simModule) run(proc *testsim.Process, applyFn applyEventsFn) {
 			case *eventpb.Event_WalLoadAll:
 			//case *eventpb.Event_Init:
 			default:
-				if !proc.Delay(m.SimNode.delayFn(e)) {
-					return
-				}
+				// if !proc.Delay(m.SimNode.delayFn(e)) {
+				// 	return
+				// }
 			}
 		}
 
