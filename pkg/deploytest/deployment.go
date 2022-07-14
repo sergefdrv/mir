@@ -18,7 +18,6 @@ import (
 
 	"github.com/filecoin-project/mir/pkg/iss"
 	"github.com/filecoin-project/mir/pkg/pb/eventpb"
-	"github.com/filecoin-project/mir/pkg/testsim"
 
 	"github.com/filecoin-project/mir"
 	"github.com/filecoin-project/mir/pkg/dummyclient"
@@ -80,7 +79,7 @@ type Deployment struct {
 	// Otherwise, the fake transport might be created, but will not be used.
 	FakeTransport *FakeTransport
 
-	Simulation *testsim.Simulation
+	Simulation *modules.Simulation
 
 	// The replicas of the deployment.
 	TestReplicas []*TestReplica
@@ -113,7 +112,7 @@ func NewDeployment(conf *TestConfig) (*Deployment, error) {
 		delayFn := func(from, to t.NodeID) time.Duration {
 			return simulation.RandDuration(0, 10*time.Millisecond)
 		}
-		simTransport = NewSimTransport(simulation.Simulation, delayFn)
+		simTransport = NewSimTransport(simulation.Runtime, delayFn)
 	case "fake":
 		fakeTransport = NewFakeTransport(conf.NumReplicas)
 	}
@@ -196,6 +195,7 @@ func NewDeployment(conf *TestConfig) (*Deployment, error) {
 	return &Deployment{
 		TestConfig:    conf,
 		FakeTransport: fakeTransport,
+		Simulation:    simulation,
 		TestReplicas:  replicas,
 		Clients:       netClients,
 	}, nil

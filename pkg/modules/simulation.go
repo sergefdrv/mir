@@ -16,14 +16,14 @@ import (
 )
 
 type Simulation struct {
-	*testsim.Simulation
+	*testsim.Runtime
 	//nodes   map[t.NodeID]*SimNode
 	//stopChan chan struct{}
 }
 
 func NewSimulation(rnd *rand.Rand) *Simulation {
 	return &Simulation{
-		Simulation: testsim.NewSimulation(rnd),
+		Runtime: testsim.NewRuntime(rnd),
 		//nodes:      make(map[t.NodeID]*SimNode),
 		//stopChan: make(chan struct{}),
 	}
@@ -150,17 +150,32 @@ func (n *SimNode) WrapModule(id t.ModuleID, m Module) Module {
 	// return n.newModule(applyFn, moduleChan)
 }
 
+func (n *SimNode) Start() {
+	proc := n.Spawn()
+	go func() {
+		initEvents := events.EmptyList()
+		if _, ok := n.moduleChans["wal"]; ok {
+			initEvents.PushBack(events.WALLoadAll("wal"))
+		}
+		for m := range n.moduleChans {
+			initEvents.PushBack(events.Init(m))
+		}
+		n.SendEventList(proc, initEvents)
+		proc.Exit()
+	}()
+}
+
 type applyEventsFn func(ctx context.Context, eventList *events.EventList) (*events.EventList, error)
 
-type eventsIn struct {
-	ctx       context.Context
-	eventList *events.EventList
-}
+// type eventsIn struct {
+// 	ctx       context.Context
+// 	eventList *events.EventList
+// }
 
-type eventsOut struct {
-	eventList *events.EventList
-	err       error
-}
+// type eventsOut struct {
+// 	eventList *events.EventList
+// 	err       error
+// }
 
 type simModule struct {
 	// Module
@@ -168,7 +183,9 @@ type simModule struct {
 	applyFn applyEventsFn
 	// inChan  chan eventsIn
 	// outChan chan eventsOut
+	//eventChan chan *eventpb.Event
 	eventChan chan *eventpb.Event
+	//eventChan *testsim.Chan
 	//simChan        *testsim.Chan
 }
 
@@ -182,7 +199,9 @@ func newSimModule(n *SimNode, m Module, simChan *testsim.Chan) *simModule {
 	// 	//simChan:        simChan,
 	// }
 
-	eventChan := make(chan *eventpb.Event, 1)
+	//eventChan := make(chan *eventpb.Event /* , 1 */)
+	//eventChan := testsim.NewChan()
+	eventChan := make(chan *eventpb.Event)
 	proc := n.Spawn()
 	go func() {
 		for {
@@ -191,6 +210,7 @@ func newSimModule(n *SimNode, m Module, simChan *testsim.Chan) *simModule {
 				return
 			}
 			eventChan <- e
+			//proc.Send(eventChan, e)
 		}
 	}()
 
@@ -292,12 +312,20 @@ func (m *simModule) applyEvents(ctx context.Context, eventList *events.EventList
 	// 	origEvents[i] = <-m.origEventsChan
 	// }
 	origEvents := events.EmptyList()
-	for i := 0; i < eventList.Len(); i++ {
+	// for i := 0; i < eventList.Len(); i++ {
+	// v, ok := proc.Recv(m.eventChan)
+	// if !ok {
+	// 	return
+	// }
+	// origEvents.PushBack(v.(*eventpb.Event))
+	//origEvents.PushBack(<-m.eventChan)
+	// }
+	for origEvents.Len() < eventList.Len() {
 		origEvents.PushBack(<-m.eventChan)
 	}
 
 	// for _, e := range origEvents {
-	it := origEvents.Iterator()
+	it := eventList.Iterator()
 	for e := it.Next(); e != nil; e = it.Next() {
 		if !proc.Delay(m.SimNode.delayFn(e)) {
 			return nil, nil

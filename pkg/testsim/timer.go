@@ -9,15 +9,15 @@ import (
 )
 
 type timer struct {
-	*Simulation
+	*Runtime
 	*event
 	fn     func()
 	timeC  chan time.Time
 	active bool
 }
 
-func (s *Simulation) newTimer(d time.Duration, f func()) (t *timer) {
-	t = &timer{Simulation: s}
+func (r *Runtime) newTimer(d time.Duration, f func()) (t *timer) {
+	t = &timer{Runtime: r}
 	if f != nil {
 		t.fn = f
 	} else {
@@ -29,20 +29,20 @@ func (s *Simulation) newTimer(d time.Duration, f func()) (t *timer) {
 }
 
 func (t *timer) schedule(d time.Duration) {
-	s := t.Simulation
-	t.event = s.newEvent(d, func() {
+	r := t.Runtime
+	t.event = r.schedule(d, func() {
 		t.active = false
 		if t.fn != nil {
 			t.fn()
 		} else {
-			t.timeC <- s.Now()
+			t.timeC <- r.Now()
 		}
 	})
 	t.active = true
 }
 
 func (t *timer) cancel() {
-	t.Simulation.removeEvent(t.event)
+	t.Runtime.unschedule(t.event)
 	t.event = nil
 	t.active = false
 }
@@ -63,8 +63,8 @@ type ticker struct {
 	timer
 }
 
-func (s *Simulation) newTicker(d time.Duration) (t *ticker) {
-	return &ticker{*s.newTimer(d, nil)}
+func (r *Runtime) newTicker(d time.Duration) (t *ticker) {
+	return &ticker{*r.newTimer(d, nil)}
 }
 
 func (t *ticker) Reset(d time.Duration) { t.timer.Reset(d) }

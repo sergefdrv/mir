@@ -151,7 +151,12 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 
 	// Start thread submitting requests from a (single) hypothetical client.
 	// The client submits a predefined number of requests and then stops.
-	go tr.submitFakeRequests(ctx, node, &wg)
+	go func() {
+		tr.submitFakeRequests(ctx, node, &wg)
+		if tr.Proc != nil {
+			tr.Proc.Exit()
+		}
+	}()
 
 	// ATTENTION! This is hacky!
 	// If the test replica used the GRPC transport, initialize the Net module.
@@ -164,17 +169,23 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 		transport.Connect(ctx)
 	}
 
-	if tr.Proc != nil {
-		//go func() {
-		//tr.Sim.SendEvents(tr.Proc, events.ListOf(events.WALLoadAll("wal")))
-		tr.Sim.SendEvent(tr.Proc, events.WALLoadAll("wal"))
-		initEvents := events.EmptyList()
-		for m := range nodeModules {
-			initEvents.PushBack(events.Init(m))
-			// tr.Sim.SendEvents(tr.Proc, events.ListOf(events.Init(m)))
-		}
-		go tr.Sim.SendEventList(tr.Proc, initEvents)
+	if tr.Sim != nil {
+		// proc := tr.Sim.Spawn()
+		// //go func() {
+		// //tr.Sim.SendEvents(tr.Proc, events.ListOf(events.WALLoadAll("wal")))
+		// initEvents := events.EmptyList()
+		// initEvents.PushBack(events.WALLoadAll("wal"))
+		// for m := range nodeModules {
+		// 	initEvents.PushBack(events.Init(m))
+		// 	// tr.Sim.SendEvents(tr.Proc, events.ListOf(events.Init(m)))
+		// }
+		// // go tr.Sim.SendEventList(tr.Proc, initEvents)
+		// go func() {
+		// 	tr.Sim.SendEventList(proc, initEvents)
+		// 	proc.Exit()
 		// }()
+		// // }()
+		tr.Sim.Start()
 	}
 
 	// Run the node until it stops.
@@ -191,9 +202,9 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 	wg.Wait()
 	tr.Config.Logger.Log(logging.LevelInfo, "Fake request submission done.")
 
-	if tr.Proc != nil {
-		tr.Proc.Exit()
-	}
+	// if tr.Proc != nil {
+	// 	tr.Proc.Exit()
+	// }
 
 	// ATTENTION! This is hacky!
 	// If the test replica used the GRPC transport, stop the Net module.
@@ -230,7 +241,7 @@ func (tr *TestReplica) submitFakeRequests(ctx context.Context, node *mir.Node, w
 				)},
 			))
 
-			if tr.Sim != nil {
+			if tr.Proc != nil {
 				tr.Sim.SendEventList(tr.Proc, eventList)
 				// tr.Sim.SendEvents(tr.Proc, eventList)
 				tr.Proc.Delay(tr.Sim.RandDuration(0, time.Millisecond))

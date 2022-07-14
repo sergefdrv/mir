@@ -20,18 +20,18 @@ import (
 type MessageDelayFn func(from, to t.NodeID) time.Duration
 
 type SimTransport struct {
-	*testsim.Simulation
+	*testsim.Runtime
 	delayFn  MessageDelayFn
 	nodes    map[t.NodeID]*simTransportModule
 	stopChan chan struct{}
 }
 
-func NewSimTransport(s *testsim.Simulation, delayFn MessageDelayFn) *SimTransport {
+func NewSimTransport(r *testsim.Runtime, delayFn MessageDelayFn) *SimTransport {
 	return &SimTransport{
-		Simulation: s,
-		delayFn:    delayFn,
-		nodes:      make(map[t.NodeID]*simTransportModule),
-		stopChan:   make(chan struct{}),
+		Runtime:  r,
+		delayFn:  delayFn,
+		nodes:    make(map[t.NodeID]*simTransportModule),
+		stopChan: make(chan struct{}),
 	}
 }
 
@@ -70,7 +70,7 @@ func (t *SimTransport) newModule(id t.NodeID, node *modules.SimNode) *simTranspo
 	}
 
 	//go m.handleInChan(t.Simulation.Spawn())
-	go m.handleOutChan(t.Simulation.Spawn())
+	go m.handleOutChan(t.Runtime.Spawn())
 
 	return m
 }
