@@ -9,9 +9,10 @@ package mir
 import (
 	"context"
 	"fmt"
-	"github.com/filecoin-project/mir/pkg/eventlog"
 	"reflect"
 	"sync"
+
+	"github.com/filecoin-project/mir/pkg/eventlog"
 
 	"github.com/filecoin-project/mir/pkg/events"
 	"github.com/filecoin-project/mir/pkg/modules"

@@ -122,10 +122,11 @@ func (m *simTransportModule) sendMessage(ctx context.Context, msg *messagepb.Mes
 		}
 	}()
 
+	d := m.delayFn(m.id, target)
 	go func() {
 		defer close(done)
 
-		if !proc.Delay(m.delayFn(m.id, target)) {
+		if !proc.Delay(d) {
 			return
 		}
 
@@ -172,7 +173,7 @@ func (m *simTransportModule) handleOutChan(proc *testsim.Process) {
 	for {
 		v, ok := proc.Recv(m.simChan)
 		if !ok {
-			panic("Module simulation process died")
+			return
 		}
 		msg := v.(message)
 
@@ -184,10 +185,12 @@ func (m *simTransportModule) handleOutChan(proc *testsim.Process) {
 		destModule := t.ModuleID(msg.message.DestModule)
 		e := events.MessageReceived(destModule, msg.from, msg.message)
 
-		m.SimNode.SendEvent(proc, e)
+		//m.SimNode.SendEvent(proc, e)
+		//m.SendEvents(events.ListOf(e))
 		select {
 		case m.outChan <- events.ListOf(e):
-			// m.SimNode.SendEvent(proc, e)
+			//m.SendEvents(events.ListOf(e))
+			m.SimNode.SendEvents(proc, events.ListOf(e))
 		case <-m.SimTransport.stopChan:
 			return
 		}

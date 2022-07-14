@@ -147,16 +147,6 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 
 	// Initialize WaitGroup for the replica's request submission thread.
 	var wg sync.WaitGroup
-	wg.Add(1)
-
-	// Start thread submitting requests from a (single) hypothetical client.
-	// The client submits a predefined number of requests and then stops.
-	go func() {
-		tr.submitFakeRequests(ctx, node, &wg)
-		if tr.Proc != nil {
-			tr.Proc.Exit()
-		}
-	}()
 
 	// ATTENTION! This is hacky!
 	// If the test replica used the GRPC transport, initialize the Net module.
@@ -169,6 +159,7 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 		transport.Connect(ctx)
 	}
 
+	ready := make(chan struct{})
 	if tr.Sim != nil {
 		// proc := tr.Sim.Spawn()
 		// //go func() {
@@ -185,8 +176,25 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 		// 	proc.Exit()
 		// }()
 		// // }()
-		tr.Sim.Start()
+		//proc := tr.Sim.Spawn()
+		//go func() {
+		tr.Sim.Start(ready)
+		//	proc.Exit()
+		tr.Proc.Exit()
+		//close(ready)
+		//}()
+	} else {
+		close(ready)
 	}
+
+	// Start thread submitting requests from a (single) hypothetical client.
+	// The client submits a predefined number of requests and then stops.
+	wg.Add(1)
+	go func() {
+		<-ready
+		tr.Proc = tr.Sim.Spawn()
+		tr.submitFakeRequests(ctx, node, &wg)
+	}()
 
 	// Run the node until it stops.
 	exitErr := node.Run(ctx)
@@ -242,9 +250,10 @@ func (tr *TestReplica) submitFakeRequests(ctx context.Context, node *mir.Node, w
 			))
 
 			if tr.Proc != nil {
-				tr.Sim.SendEventList(tr.Proc, eventList)
-				// tr.Sim.SendEvents(tr.Proc, eventList)
-				tr.Proc.Delay(tr.Sim.RandDuration(0, time.Millisecond))
+				tr.Proc.Delay(tr.Sim.RandDuration(1, time.Millisecond))
+				//tr.Sim.SendEvents(eventList)
+				tr.Sim.SendEvents(tr.Proc, eventList)
+				// tr.Proc.Delay(tr.Sim.RandDuration(0, time.Millisecond))
 			}
 
 			if err := node.InjectEvents(ctx, eventList); err != nil {
@@ -253,7 +262,17 @@ func (tr *TestReplica) submitFakeRequests(ctx context.Context, node *mir.Node, w
 				// so just returning for now, we should address later
 				break
 			}
-			// TODO: Add some configurable delay here
+
+			if tr.Proc != nil {
+				// 	tr.Sim.SendEvents( /* tr.Proc,  */ eventList)
+				tr.Proc.Delay(tr.Sim.RandDuration(1, time.Millisecond))
+			} else {
+				// TODO: Add some configurable delay here
+			}
 		}
+	}
+
+	if tr.Proc != nil {
+		tr.Proc.Exit()
 	}
 }

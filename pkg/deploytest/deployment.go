@@ -137,7 +137,7 @@ func NewDeployment(conf *TestConfig) (*Deployment, error) {
 		switch conf.Transport {
 		case "sim":
 			delayFn := func(e *eventpb.Event) time.Duration {
-				return simTransport.RandExpDuration(0, time.Microsecond)
+				return simTransport.RandDuration(1, time.Microsecond)
 			}
 			simNode = simulation.NewNode(delayFn)
 			transport = simTransport.NodeModule(t.NewNodeIDFromInt(i), simNode)
@@ -229,10 +229,12 @@ func (d *Deployment) Run(ctx context.Context) (nodeErrors []error, heapObjects i
 	nodeWg.Add(len(d.TestReplicas))
 	for i, testReplica := range d.TestReplicas {
 
+		start := make(chan struct{})
 		// Start the replica in a separate goroutine.
 		go func(i int, testReplica *TestReplica) {
 			defer nodeWg.Done()
 
+			<-start
 			testReplica.Config.Logger.Log(logging.LevelDebug, "running")
 			nodeErrors[i] = testReplica.Run(ctx2)
 			if err := nodeErrors[i]; err != nil {
@@ -241,6 +243,18 @@ func (d *Deployment) Run(ctx context.Context) (nodeErrors []error, heapObjects i
 				testReplica.Config.Logger.Log(logging.LevelDebug, "exit")
 			}
 		}(i, testReplica)
+
+		if d.Simulation != nil {
+			proc := d.Simulation.Spawn()
+			testReplica.Proc.Exit()
+			testReplica.Proc = proc
+			d := d.Simulation.RandDuration(1, time.Microsecond)
+			go func() {
+				proc.Delay(d)
+				close(start)
+				//proc.Exit()
+			}()
+		}
 	}
 
 	// Start the message transport subsystem

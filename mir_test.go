@@ -116,14 +116,20 @@ func testIntegrationWithISS(t *testing.T) {
 				NumFakeRequests: 10,
 				Duration:        4 * time.Second,
 			}},
-		10: {"Submit 10 fake requests with 4 nodes in simulation",
+		10: {"Do nothing with 4 nodes in simulation",
+			&deploytest.TestConfig{
+				NumReplicas: 4,
+				Transport:   "sim",
+				Duration:    4 * time.Second,
+			}},
+		11: {"Submit 10 fake requests with 4 nodes in simulation",
 			&deploytest.TestConfig{
 				NumReplicas:     4,
 				Transport:       "sim",
 				NumFakeRequests: 10,
 				Duration:        4 * time.Second,
 			}},
-		11: {"Submit 100 fake requests with 4 nodes in simulation",
+		12: {"Submit 100 fake requests with 4 nodes in simulation",
 			&deploytest.TestConfig{
 				NumReplicas:     4,
 				NumClients:      0,
@@ -213,6 +219,7 @@ func runIntegrationWithISSConfig(tb testing.TB, conf *deploytest.TestConfig) (he
 		if deployment.Simulation != nil {
 			go func() {
 				deployment.Simulation.RunFor(conf.Duration)
+				deployment.Simulation.Stop()
 				cancel()
 			}()
 		} else {

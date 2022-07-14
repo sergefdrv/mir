@@ -30,6 +30,9 @@ type Runtime struct {
 	startTime  time.Time
 	elapsed    time.Duration
 	eventQueue eventQueue
+	queueLock  sync.Mutex
+
+	stopChan chan struct{}
 }
 
 func NewRuntime(rnd *rand.Rand) *Runtime {
@@ -41,6 +44,7 @@ func NewRuntime(rnd *rand.Rand) *Runtime {
 		startTime:  stdtime.Now(),
 		elapsed:    0,
 		eventQueue: []*event{},
+		stopChan:   make(chan struct{}),
 	}
 	r.resumeCond = *sync.NewCond(&r.activeProcLock)
 
@@ -115,6 +119,7 @@ func (r *Runtime) RunFor(d time.Duration) {
 	//time.Sleep(d)
 	fmt.Println("No more work")
 	fmt.Println(r.eventQueue.Len(), "events in the queue")
+	//select {}
 }
 
 func (r *Runtime) Step() (ok bool) {
@@ -124,6 +129,10 @@ func (r *Runtime) Step() (ok bool) {
 		ok = true
 	}
 	return
+}
+
+func (r *Runtime) Stop() {
+	close(r.stopChan)
 }
 
 func (r *Runtime) elapsedAfter(d time.Duration) time.Duration {
@@ -146,7 +155,9 @@ func (r *Runtime) schedule(d time.Duration, f func()) *event {
 		deadline: r.elapsedAfter(d),
 		fn:       f,
 	}
+	r.queueLock.Lock()
 	heap.Push(&r.eventQueue, e)
+	r.queueLock.Unlock()
 	return e
 }
 
@@ -266,6 +277,7 @@ func (p *Process) Fork() *Process { return p.Spawn() }
 // while waiting.
 func (p *Process) Delay(d time.Duration) (ok bool) {
 	// time.Sleep(d)
+	fmt.Println("Sleeping for", d)
 
 	done := make(chan struct{})
 	e := p.Runtime.schedule(d, func() {
@@ -279,6 +291,8 @@ func (p *Process) Delay(d time.Duration) (ok bool) {
 		return true
 	case <-p.killChan:
 		p.Runtime.unschedule(e)
+		return false
+	case <-p.stopChan:
 		return false
 	}
 }
@@ -309,6 +323,8 @@ func (p *Process) Send(c *Chan, v any) (ok bool) {
 		//p.activate()
 		return true
 	case <-p.killChan:
+		return false
+	case <-p.stopChan:
 		return false
 	}
 }
@@ -341,6 +357,8 @@ func (p *Process) Recv(c *Chan) (v any, ok bool) {
 		//p.activate()
 		return v, true
 	case <-p.killChan:
+		return nil, false
+	case <-p.stopChan:
 		return nil, false
 	}
 }
