@@ -39,15 +39,17 @@ type EventDelayFn func(e *eventpb.Event) time.Duration
 
 type SimNode struct {
 	*Simulation
+	//wal     wal.WAL
 	delayFn EventDelayFn
 	//id          t.NodeID
 	moduleChans map[t.ModuleID]*testsim.Chan
 }
 
-func (s *Simulation) NewNode( /* id t.NodeID, */ delayFn EventDelayFn) *SimNode {
+func (s *Simulation) NewNode(delayFn EventDelayFn) *SimNode {
 	n := &SimNode{
 		Simulation: s,
-		delayFn:    delayFn,
+		//wal:        wal,
+		delayFn: delayFn,
 		//id:          id,
 		moduleChans: make(map[t.ModuleID]*testsim.Chan),
 	}
@@ -159,7 +161,7 @@ func (n *SimNode) WrapModule(id t.ModuleID, m Module) Module {
 	// return n.newModule(applyFn, moduleChan)
 }
 
-func (n *SimNode) Start(done chan struct{}) {
+func (n *SimNode) Start(walEvents *events.EventList, done chan struct{}) {
 	proc := n.Spawn()
 	go func() {
 		//proc.Delay(n.RandDuration(1, time.Microsecond))
@@ -173,18 +175,23 @@ func (n *SimNode) Start(done chan struct{}) {
 		// 	proc.Delay(n.RandDuration(1, time.Microsecond))
 		// 	//proc.Delay(0)
 		// }
+		// if n.wal != nil {
+		// 	walEvents, err := n.wal.LoadAll(context.Background())
+		// 	if err != nil {
+		// 		panic(fmt.Errorf("Error loading from WAL: %w", err))
+		// 	}
+		n.SendEvents(proc, walEvents)
+		// }
+		proc.Delay(1)
 		for m := range n.moduleChans {
 			initEvents := events.EmptyList()
-			if m == "wal" {
-				// 	//initEvents.PushBack(events.WALLoadAll("wal"))
-				//	continue
-			}
 			initEvents.PushBack(events.Init(m))
 			//n.SendEvents( /* proc,  */ initEvents)
 			proc.Send(n.moduleChans[m], initEvents)
 			//proc.Delay(n.RandDuration(1, time.Microsecond))
-			proc.Delay(0)
+			proc.Yield()
 		}
+		// proc.Delay(1)
 		proc.Exit()
 		close(done)
 	}()

@@ -269,8 +269,8 @@ type Process struct {
 // Fork creates a new active process.
 func (p *Process) Fork() *Process { return p.Spawn() }
 
-// // Yield enables another waiting process to run.
-// func (p *Process) Yield() { p.Delay(0) }
+// Yield enables another waiting process to run.
+func (p *Process) Yield() { p.Delay(0) }
 
 // Delay suspends the execution and returns after d amount of
 // simulated time. It returns false in case the process was killed

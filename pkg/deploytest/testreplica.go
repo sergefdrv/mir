@@ -179,7 +179,7 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 		// // }()
 		//proc := tr.Sim.Spawn()
 		//go func() {
-		tr.Sim.Start(ready)
+		tr.Sim.Start(events.EmptyList(), ready)
 		//	proc.Exit()
 		tr.Proc.Exit()
 		//close(ready)
