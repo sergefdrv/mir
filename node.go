@@ -176,7 +176,7 @@ func (n *Node) processWAL(ctx context.Context) error {
 	var err error
 
 	// Add all events from the WAL to the new EventList.
-	if storedEvents, err = n.wal.WALLoadAll(ctx); err != nil {
+	if storedEvents, err = n.wal.LoadAll(ctx); err != nil {
 		return fmt.Errorf("could not load WAL events: %w", err)
 	}
 

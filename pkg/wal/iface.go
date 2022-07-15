@@ -12,8 +12,8 @@ import (
 
 // WAL provides access to the write-ahead log.
 //
-// WALLoadAll method loads all events stored in the WAL and returns
+// LoadAll method loads all events stored in the WAL and returns
 // them as a new EventList.
 type WAL interface {
-	WALLoadAll(ctx context.Context) (*events.EventList, error)
+	LoadAll(ctx context.Context) (*events.EventList, error)
 }

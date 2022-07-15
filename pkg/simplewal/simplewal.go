@@ -45,11 +45,11 @@ type WAL struct {
 	retentionIndex t.WALRetIndex
 }
 
-func (w *WAL) WALLoadAll(ctx context.Context) (*events.EventList, error) {
+func (w *WAL) LoadAll(ctx context.Context) (*events.EventList, error) {
 	storedEvents := events.EmptyList()
 
 	// Add all events from the WAL to the new EventList.
-	if err := w.LoadAll(func(retIdx t.WALRetIndex, event *eventpb.Event) {
+	if err := w.loadAll(func(retIdx t.WALRetIndex, event *eventpb.Event) {
 		storedEvents.PushBack(event)
 	}); err != nil {
 		return nil, fmt.Errorf("could not load WAL events: %w", err)
@@ -130,7 +130,7 @@ func (w *WAL) IsEmpty() (bool, error) {
 	return firstIndex == 0, nil
 }
 
-func (w *WAL) LoadAll(forEach func(index t.WALRetIndex, p *eventpb.Event)) error {
+func (w *WAL) loadAll(forEach func(index t.WALRetIndex, p *eventpb.Event)) error {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 	firstIndex, err := w.log.FirstIndex()
