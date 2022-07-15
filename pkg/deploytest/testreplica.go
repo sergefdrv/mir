@@ -128,6 +128,7 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 		tr.ID,
 		tr.Config,
 		nodeModules,
+		nil,
 		interceptor,
 	)
 	if err != nil {
