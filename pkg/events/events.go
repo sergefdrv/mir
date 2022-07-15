@@ -25,7 +25,6 @@ type EventType interface {
 		eventpb.Event_WalAppend |
 		eventpb.Event_WalEntry |
 		eventpb.Event_WalTruncate |
-		eventpb.Event_WalLoadAll |
 		eventpb.Event_NewRequests |
 		eventpb.Event_HashRequest |
 		eventpb.Event_HashResult |
@@ -297,14 +296,6 @@ func WALTruncate(destModule t.ModuleID, retentionIndex t.WALRetIndex) *eventpb.E
 		Type: &eventpb.Event_WalTruncate{WalTruncate: &eventpb.WALTruncate{
 			RetentionIndex: retentionIndex.Pb(),
 		}},
-	}
-}
-
-// WALLoadAll returns and event instructing the WAL to load and emit all stored events.
-func WALLoadAll(destModule t.ModuleID) *eventpb.Event {
-	return &eventpb.Event{
-		DestModule: destModule.Pb(),
-		Type:       &eventpb.Event_WalLoadAll{WalLoadAll: &eventpb.WALLoadAll{}},
 	}
 }
 
