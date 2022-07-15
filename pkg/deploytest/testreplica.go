@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/filecoin-project/mir/pkg/net"
+
 	"github.com/filecoin-project/mir"
 	mirCrypto "github.com/filecoin-project/mir/pkg/crypto"
 	"github.com/filecoin-project/mir/pkg/eventlog"
@@ -117,6 +119,7 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 		tr.ID,
 		tr.Config,
 		modulesWithDefaults,
+		wal,
 		interceptor,
 	)
 	if err != nil {
