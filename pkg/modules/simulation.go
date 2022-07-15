@@ -165,14 +165,14 @@ func (n *SimNode) Start(done chan struct{}) {
 		//proc.Delay(n.RandDuration(1, time.Microsecond))
 		//n.SendEvents( /* proc, */ initEvents)
 		// initEvents = events.EmptyList()
-		if _, ok := n.moduleChans["wal"]; ok {
-			initEvents := events.EmptyList()
-			initEvents.PushBack(events.WALLoadAll("wal"))
-			//initEvents.PushBack(events.Init("wal"))
-			proc.Send(n.moduleChans["wal"], initEvents)
-			proc.Delay(n.RandDuration(1, time.Microsecond))
-			//proc.Delay(0)
-		}
+		// if _, ok := n.moduleChans["wal"]; ok {
+		// 	initEvents := events.EmptyList()
+		// 	initEvents.PushBack(events.WALLoadAll("wal"))
+		// 	//initEvents.PushBack(events.Init("wal"))
+		// 	proc.Send(n.moduleChans["wal"], initEvents)
+		// 	proc.Delay(n.RandDuration(1, time.Microsecond))
+		// 	//proc.Delay(0)
+		// }
 		for m := range n.moduleChans {
 			initEvents := events.EmptyList()
 			if m == "wal" {
@@ -347,7 +347,7 @@ func (m *simModule) run(proc *testsim.Process, applyFn applyEventsFn) {
 				panic(fmt.Sprint(e, "!=", e2))
 			}
 			switch e.Type.(type) {
-			case *eventpb.Event_WalLoadAll:
+			//case *eventpb.Event_WalLoadAll:
 			//case *eventpb.Event_Init:
 			default:
 				// if !proc.Delay(m.SimNode.delayFn(e)) {
