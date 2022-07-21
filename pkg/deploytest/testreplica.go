@@ -7,8 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-
-	"github.com/filecoin-project/mir/pkg/net"
+	"time"
 
 	"github.com/filecoin-project/mir"
 	mirCrypto "github.com/filecoin-project/mir/pkg/crypto"
@@ -20,7 +19,7 @@ import (
 	"github.com/filecoin-project/mir/pkg/modules"
 	"github.com/filecoin-project/mir/pkg/pb/requestpb"
 	"github.com/filecoin-project/mir/pkg/requestreceiver"
-	"github.com/filecoin-project/mir/pkg/simplewal"
+	"github.com/filecoin-project/mir/pkg/testsim"
 	t "github.com/filecoin-project/mir/pkg/types"
 )
 
@@ -46,6 +45,10 @@ type TestReplica struct {
 	// Network transport subsystem.
 	Net modules.ActiveModule
 
+	Sim *SimNode
+
+	Proc *testsim.Process
+
 	// Number of simulated requests inserted in the test replica by a hypothetical client.
 	NumFakeRequests int
 
@@ -69,11 +72,11 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 	if err := os.MkdirAll(walPath, 0700); err != nil {
 		return fmt.Errorf("error creating WAL directory: %w", err)
 	}
-	wal, err := simplewal.Open(walPath)
-	if err != nil {
-		return fmt.Errorf("error opening WAL: %w", err)
-	}
-	defer wal.Close()
+	// wal, err := simplewal.Open(walPath)
+	// if err != nil {
+	// 	return fmt.Errorf("error opening WAL: %w", err)
+	// }
+	// defer wal.Close()
 
 	// Initialize recording of events.
 	file, err := os.Create(tr.EventLogFile())
@@ -104,13 +107,18 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 	}
 
 	// Create the mir node for this replica.
-	modulesWithDefaults, err := iss.DefaultModules(map[t.ModuleID]modules.Module{
+	nodeModules := modules.Modules{
 		"app":    tr.App,
 		"crypto": mirCrypto.New(cryptoModule),
-		"wal":    wal,
-		"iss":    issProtocol,
-		"net":    tr.Net,
-	})
+		//"wal":    wal,
+		"iss": issProtocol,
+		"net": tr.Net,
+	}
+	nodeModules, err = iss.DefaultModules(nodeModules)
+	if tr.Sim != nil {
+		nodeModules["timer"] = NewSimTimerModule(tr.Sim)
+		nodeModules = tr.Sim.WrapModules(nodeModules)
+	}
 	if err != nil {
 		return fmt.Errorf("error initializing the Mir modules: %w", err)
 	}
@@ -118,8 +126,8 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 	node, err := mir.NewNode(
 		tr.ID,
 		tr.Config,
-		modulesWithDefaults,
-		wal,
+		nodeModules,
+		nil,
 		interceptor,
 	)
 	if err != nil {
@@ -139,11 +147,6 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 
 	// Initialize WaitGroup for the replica's request submission thread.
 	var wg sync.WaitGroup
-	wg.Add(1)
-
-	// Start thread submitting requests from a (single) hypothetical client.
-	// The client submits a predefined number of requests and then stops.
-	go tr.submitFakeRequests(ctx, node, &wg)
 
 	// ATTENTION! This is hacky!
 	// If the test replica used the GRPC transport, initialize the Net module.
@@ -155,6 +158,26 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 		}
 		transport.Connect(ctx)
 	}
+
+	// var readyChan *testsim.Chan
+	// if tr.Sim != nil {
+	// 	readyChan = testsim.NewChan()
+	// 	tr.Sim.Start(events.EmptyList(), readyChan)
+	// }
+
+	// Start thread submitting requests from a (single) hypothetical client.
+	// The client submits a predefined number of requests and then stops.
+	wg.Add(1)
+	go func() {
+		// if tr.Sim != nil {
+		// 	tr.Proc.Recv(readyChan)
+		// }
+		if tr.Proc != nil {
+			//readyChan = testsim.NewChan()
+			tr.Sim.Start(tr.Proc, events.EmptyList() /* readyChan */)
+		}
+		tr.submitFakeRequests(ctx, node, &wg)
+	}()
 
 	// Run the node until it stops.
 	exitErr := node.Run(ctx)
@@ -169,6 +192,10 @@ func (tr *TestReplica) Run(ctx context.Context) error {
 	// Wait for the local request submission thread.
 	wg.Wait()
 	tr.Config.Logger.Log(logging.LevelInfo, "Fake request submission done.")
+
+	// if tr.Proc != nil {
+	// 	tr.Proc.Exit()
+	// }
 
 	// ATTENTION! This is hacky!
 	// If the test replica used the GRPC transport, stop the Net module.
@@ -196,21 +223,39 @@ func (tr *TestReplica) submitFakeRequests(ctx context.Context, node *mir.Node, w
 			break
 		default:
 			// Otherwise, submit next request.
-
-			if err := node.InjectEvents(ctx, events.ListOf(events.NewClientRequests(
+			eventList := events.ListOf(events.NewClientRequests(
 				"iss",
 				[]*requestpb.Request{events.ClientRequest(
 					t.NewClientIDFromInt(0),
 					t.ReqNo(i),
 					[]byte(fmt.Sprintf("Request %d", i)),
 				)},
-			))); err != nil {
+			))
+
+			if tr.Proc != nil {
+				//tr.Proc.Delay(tr.Sim.RandDuration(1, time.Millisecond))
+				//tr.Sim.SendEvents(tr.Proc, eventList)
+				// tr.Proc.Delay(tr.Sim.RandDuration(0, time.Millisecond))
+				//tr.Proc.Yield()
+			}
+
+			if err := node.InjectEvents(ctx, eventList); err != nil {
 
 				// TODO (Jason), failing on err causes flakes in the teardown,
 				// so just returning for now, we should address later
 				break
 			}
-			// TODO: Add some configurable delay here
+
+			if tr.Proc != nil {
+				tr.Sim.SendEvents(tr.Proc, eventList)
+				tr.Proc.Delay(tr.Sim.RandDuration(1, time.Millisecond))
+			} else {
+				// TODO: Add some configurable delay here
+			}
 		}
+	}
+
+	if tr.Proc != nil {
+		tr.Proc.Exit()
 	}
 }

@@ -103,6 +103,40 @@ func testIntegrationWithISS(t *testing.T) {
 				NumNetRequests: 10,
 				Duration:       4 * time.Second,
 			}},
+		8: {"Do nothing with 1 node in simulation",
+			&deploytest.TestConfig{
+				NumReplicas: 1,
+				Transport:   "sim",
+				Duration:    4 * time.Second,
+			}},
+		9: {"Submit 10 fake requests with 1 node in simulation",
+			&deploytest.TestConfig{
+				NumReplicas:     1,
+				Transport:       "sim",
+				NumFakeRequests: 10,
+				Duration:        4 * time.Second,
+			}},
+		10: {"Do nothing with 4 nodes in simulation",
+			&deploytest.TestConfig{
+				NumReplicas: 4,
+				Transport:   "sim",
+				Duration:    4 * time.Second,
+			}},
+		11: {"Submit 10 fake requests with 4 nodes in simulation",
+			&deploytest.TestConfig{
+				NumReplicas:     4,
+				Transport:       "sim",
+				NumFakeRequests: 10,
+				Duration:        4 * time.Second,
+			}},
+		12: {"Submit 100 fake requests with 4 nodes in simulation",
+			&deploytest.TestConfig{
+				NumReplicas:     4,
+				NumClients:      0,
+				Transport:       "sim",
+				NumFakeRequests: 100,
+				Duration:        10 * time.Second,
+			}},
 	}
 
 	for i, test := range tests {
@@ -111,6 +145,10 @@ func testIntegrationWithISS(t *testing.T) {
 		createDeploymentDir(t, test.Config)
 
 		t.Run(fmt.Sprintf("%03d", i), func(t *testing.T) {
+			if testing.Short() && test.Config.Transport != "sim" {
+				t.SkipNow()
+			}
+
 			runIntegrationWithISSConfig(t, test.Config)
 
 			if t.Failed() {
@@ -178,10 +216,18 @@ func runIntegrationWithISSConfig(tb testing.TB, conf *deploytest.TestConfig) (he
 
 	// Schedule shutdown of test deployment
 	if conf.Duration > 0 {
-		go func() {
-			time.Sleep(conf.Duration)
-			cancel()
-		}()
+		if deployment.Simulation != nil {
+			go func() {
+				deployment.Simulation.RunFor(conf.Duration)
+				deployment.Simulation.Stop()
+				cancel()
+			}()
+		} else {
+			go func() {
+				time.Sleep(conf.Duration)
+				cancel()
+			}()
+		}
 	}
 
 	// Run deployment until it stops and returns final node errors.

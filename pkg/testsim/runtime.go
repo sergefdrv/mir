@@ -133,6 +133,13 @@ func (r *Runtime) timeAfter(d time.Duration) int64 {
 // scheduleAfter arranges the function f to be called after expiration
 // of the duration d of simulated time.
 func (r *Runtime) scheduleAfter(d time.Duration, f func()) *action {
+	if d != 0 {
+		r.queueLock.Lock()
+		if r.queue.Len() > 0 && r.queue.top().deadline == r.timeAfter(d) {
+			//fmt.Println("Time collision!")
+		}
+		r.queueLock.Unlock()
+	}
 	return r.schedule(r.timeAfter(d), f)
 }
 
@@ -167,6 +174,7 @@ func (r *Runtime) doStep() {
 
 // waitQuiescence waits until there is no more active process.
 func (r *Runtime) waitQuiescence() {
+	//fmt.Println("Waiting for quiescence")
 	r.activeProcLock.Lock()
 	for r.nrActiveProcs > 0 {
 		r.resumeCond.Wait()

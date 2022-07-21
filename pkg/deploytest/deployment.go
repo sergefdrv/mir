@@ -10,12 +10,14 @@ import (
 	"context"
 	"crypto"
 	"fmt"
+	"math/rand"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
 
 	"github.com/filecoin-project/mir/pkg/iss"
+	"github.com/filecoin-project/mir/pkg/pb/eventpb"
 
 	"github.com/filecoin-project/mir"
 	"github.com/filecoin-project/mir/pkg/dummyclient"
@@ -45,7 +47,7 @@ type TestConfig struct {
 	NumClients int
 
 	// Type of networking to use.
-	// Current possible values: "fake", "grpc"
+	// Current possible values: "sim", "fake", "grpc"
 	Transport string
 
 	// The number of requests each client submits during the execution of the deployment.
@@ -77,6 +79,8 @@ type Deployment struct {
 	// Otherwise, the fake transport might be created, but will not be used.
 	FakeTransport *FakeTransport
 
+	Simulation *Simulation
+
 	// The replicas of the deployment.
 	TestReplicas []*TestReplica
 
@@ -96,8 +100,22 @@ func NewDeployment(conf *TestConfig) (*Deployment, error) {
 	}
 
 	// Create a simulated network transport to route messages between replicas.
-	fakeTransport := NewFakeTransport(conf.NumReplicas)
-
+	var fakeTransport *FakeTransport
+	var simulation *Simulation
+	var simTransport *SimTransport
+	switch conf.Transport {
+	case "sim":
+		rndSeed := time.Now().UnixNano()
+		fmt.Println("Random seed =", rndSeed)
+		rand := rand.New(rand.NewSource(rndSeed))
+		simulation = NewSimulation(rand)
+		delayFn := func(from, to t.NodeID) time.Duration {
+			return simulation.RandDuration(0, 10*time.Millisecond)
+		}
+		simTransport = NewSimTransport(simulation.Runtime, delayFn)
+	case "fake":
+		fakeTransport = NewFakeTransport(conf.NumReplicas)
+	}
 	// Create a dummy static membership with replica IDs from 0 to len(replicas) - 1
 	membership := make([]t.NodeID, conf.NumReplicas)
 	for i := 0; i < len(membership); i++ {
@@ -115,7 +133,14 @@ func NewDeployment(conf *TestConfig) (*Deployment, error) {
 
 		// Create network transport module
 		var transport modules.ActiveModule
+		var simNode *SimNode
 		switch conf.Transport {
+		case "sim":
+			delayFn := func(e *eventpb.Event) time.Duration {
+				return simTransport.RandDuration(1, time.Microsecond)
+			}
+			simNode = simulation.NewNode(t.NewNodeIDFromInt(i), delayFn)
+			transport = simTransport.NodeModule(t.NewNodeIDFromInt(i), simNode)
 		case "fake":
 			transport = fakeTransport.Link(t.NewNodeIDFromInt(i))
 		case "grpc":
@@ -143,8 +168,12 @@ func NewDeployment(conf *TestConfig) (*Deployment, error) {
 			Dir:             filepath.Join(conf.Directory, fmt.Sprintf("node%d", i)),
 			App:             &FakeApp{},
 			Net:             transport,
+			Sim:             simNode,
 			NumFakeRequests: conf.NumFakeRequests,
 			ISSConfig:       issConfig,
+		}
+		if simNode != nil {
+			replicas[i].Proc = simNode.Spawn()
 		}
 	}
 
@@ -166,6 +195,7 @@ func NewDeployment(conf *TestConfig) (*Deployment, error) {
 	return &Deployment{
 		TestConfig:    conf,
 		FakeTransport: fakeTransport,
+		Simulation:    simulation,
 		TestReplicas:  replicas,
 		Clients:       netClients,
 	}, nil
@@ -199,10 +229,12 @@ func (d *Deployment) Run(ctx context.Context) (nodeErrors []error, heapObjects i
 	nodeWg.Add(len(d.TestReplicas))
 	for i, testReplica := range d.TestReplicas {
 
+		start := make(chan struct{})
 		// Start the replica in a separate goroutine.
 		go func(i int, testReplica *TestReplica) {
 			defer nodeWg.Done()
 
+			<-start
 			testReplica.Config.Logger.Log(logging.LevelDebug, "running")
 			nodeErrors[i] = testReplica.Run(ctx2)
 			if err := nodeErrors[i]; err != nil {
@@ -211,11 +243,25 @@ func (d *Deployment) Run(ctx context.Context) (nodeErrors []error, heapObjects i
 				testReplica.Config.Logger.Log(logging.LevelDebug, "exit")
 			}
 		}(i, testReplica)
+
+		if d.Simulation != nil {
+			proc := d.Simulation.Spawn()
+			testReplica.Proc.Exit()
+			testReplica.Proc = proc
+			d := d.Simulation.RandDuration(1, time.Microsecond)
+			go func() {
+				proc.Delay(d)
+				close(start)
+				//proc.Exit()
+			}()
+		}
 	}
 
 	// Start the message transport subsystem
-	d.FakeTransport.Start()
-	defer d.FakeTransport.Stop()
+	if d.FakeTransport != nil {
+		d.FakeTransport.Start()
+		defer d.FakeTransport.Stop()
+	}
 
 	// Connect the deployment's DummyClients to all replicas and have them submit their requests in separate goroutines.
 	// Each dummy client connects to the replicas, submits the prescribed number of requests and disconnects.
